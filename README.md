@@ -22,8 +22,8 @@ If the project includes authentication, here are some test login credentials:
 - [x] Event listing for all users
 - [x] Event registration for users
 - [ ] Real-time event updates
-- [ ] Responsive design
-- [ ] Background images for all pages
+- [x] Responsive design
+- [x] Background images for all pages
 
 ## Installation Instructions
 
