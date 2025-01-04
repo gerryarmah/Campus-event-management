@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const Event = require('../models/event');
 const auth = require('../middleware/auth');
-const admin = require('../middleware/admin');
+const admin = require('./admin');
 
 // Get all events
 router.get('/', async (req, res) => {
