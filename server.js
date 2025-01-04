@@ -5,7 +5,9 @@ const path = require('path');
 const socketio = require('socket.io');
 const http = require('http');
 require('dotenv').config();
-const authRoutes = require('./routes/auth');
+
+// Fix the import of routes, removing '.js' extension to ensure it's resolved correctly
+const authRoutes = require('./routes/auth');  // Ensure 'auth.js' exists in the routes folder
 
 // Create Express app and HTTP server
 const app = express();
@@ -49,7 +51,7 @@ app.get('/', (req, res) => {
 });
 
 // API Routes
-app.use('/api/auth', require('./routes/auth.js'));
+app.use('/api/auth', authRoutes);  // Use the imported authRoutes
 app.use('/api/events', require('./routes/events'));
 app.use('/api/admin', require('./routes/admin'));
 
