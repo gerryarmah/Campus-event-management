@@ -1,57 +1,160 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const path = require('path');  // Add path for handling static files
+const path = require('path');
+const socketio = require('socket.io');
+const http = require('http');
+require('dotenv').config();
 
-const authRoutes = require('./routes/auth');
-const eventsRoutes = require('./routes/events');
-
+// Create Express app and HTTP server
 const app = express();
+const server = http.createServer(app);
 
-const PORT = process.env.PORT || 3000;
-const MONGO_URI = process.env.MONGO_URI;
-const JWT_SECRET = process.env.JWT_SECRET;
+// Socket.IO setup
+const io = socketio(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
 
-// Middleware to serve static files (images)
-app.use('/images', express.static(path.join(__dirname, 'Images')));  // Serve files from Images folder
+// Connect to MongoDB before loading routes
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('📦 Connected to MongoDB'))
+  .catch(err => {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
+  });
 
 // Middleware
-app.use(express.json());  // Parse incoming JSON requests
-const corsOptions = {
-  origin: 'http://localhost:3001',  // Allow frontend to make requests to this backend
-  methods: 'GET,POST,PUT,DELETE',  // Allow necessary methods
-  credentials: true,  // Allow cookies and authentication headers
-};
-app.use(cors(corsOptions));
+app.use(cors({
+  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  credentials: true
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Connect to MongoDB using Mongoose
-mongoose.connect(MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-  .then(() => console.log('Connected to MongoDB successfully'))
-  .catch((err) => {
-    console.error('MongoDB connection error:', err);
-  });
+// Static file serving
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// API routes
-app.use('/auth', authRoutes);
-app.use('/events', eventsRoutes);
-
-// Basic route
+// Welcome route
 app.get('/', (req, res) => {
-  res.send('Hello, world!');
-});
-
-// Serve React frontend for production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static('client/build'));
-  app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, 'client', 'build', 'index.html'));
+  res.json({ 
+    message: 'Welcome to Campus Event Management API',
+    documentation: '/api-docs',
+    status: 'Server is running'
   });
-}
-
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
 });
+
+// API Routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/events', require('./routes/events'));
+app.use('/api/admin', require('./routes/admin'));
+
+// Socket.IO event handling
+io.on('connection', (socket) => {
+  console.log('New client connected:', socket.id);
+
+  // Join event room
+  socket.on('join_event', (eventId) => {
+    socket.join(`event_${eventId}`);
+    console.log(`Socket ${socket.id} joined event_${eventId}`);
+  });
+
+  // Leave event room
+  socket.on('leave_event', (eventId) => {
+    socket.leave(`event_${eventId}`);
+    console.log(`Socket ${socket.id} left event_${eventId}`);
+  });
+
+  // Event updates
+  socket.on('event_update', (data) => {
+    io.to(`event_${data.eventId}`).emit('event_updated', data);
+    console.log('Event update emitted:', data);
+  });
+
+  // RSVP updates
+  socket.on('rsvp_update', (data) => {
+    io.emit('rsvp_updated', data);
+    console.log('RSVP update emitted:', data);
+  });
+
+  // New event created
+  socket.on('new_event', (data) => {
+    io.emit('event_created', data);
+    console.log('New event emitted:', data);
+  });
+
+  // Event deleted
+  socket.on('event_deleted', (eventId) => {
+    io.emit('event_removed', eventId);
+    console.log('Event deletion emitted:', eventId);
+  });
+
+  // Disconnect handling
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err.stack);
+  res.status(500).json({ 
+    error: 'Something went wrong!',
+    details: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ 
+    error: 'Route not found',
+    path: req.originalUrl
+  });
+});
+
+// Start server
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+  console.log(`
+    🚀 Server is running on port ${PORT}
+    📱 Socket.IO is ready for connections
+    🌐 API Documentation: http://localhost:${PORT}/api-docs
+    🔧 Environment: ${process.env.NODE_ENV || 'development'}
+    🎓 Campus Event Management System
+    
+    Available Routes:
+    - Authentication: /api/auth
+    - Events: /api/events
+    - Admin: /api/admin
+    
+    Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}
+  `);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+  console.error('❌ Unhandled Promise Rejection:', err);
+  server.close(() => process.exit(1));
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+  server.close(() => process.exit(1));
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('👋 SIGTERM received. Performing graceful shutdown...');
+  server.close(() => {
+    mongoose.connection.close(false, () => {
+      console.log('💤 Server and MongoDB connection closed');
+      process.exit(0);
+    });
+  });
+});
+
+module.exports = { app, server, io };

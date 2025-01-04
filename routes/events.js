@@ -1,59 +1,96 @@
+// backend/routes/events.js
 const express = require('express');
-const multer = require('multer'); // Import multer
-const Event = require('../models/event'); // Event model
-const path = require('path'); // To handle file paths
-
 const router = express.Router();
+const Event = require('../models/event');
+const auth = require('../middleware/auth');
+const admin = require('../middleware/admin');
 
-// Set up storage for multer
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'Images/'); // Set the upload destination folder
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9); // Create a unique filename
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname)); // Save with original file extension
-  }
-});
-
-const upload = multer({ storage: storage }); // Initialize multer with storage options
-
-// @route   GET /events
-// @desc    Fetch all events
+// Get all events
 router.get('/', async (req, res) => {
   try {
-    const events = await Event.find();
+    const events = await Event.find().sort({ date: 1 });
     res.json(events);
   } catch (err) {
-    res.status(500).json({ error: 'Error fetching events', details: err });
+    res.status(500).json({ error: 'Failed to fetch events' });
   }
 });
 
-// @route   POST /events
-// @desc    Create a new event
-router.post('/', upload.fields([{ name: 'eventImage', maxCount: 1 }, { name: 'backgroundImage', maxCount: 1 }]), async (req, res) => {
+// Create new event (admin only)
+router.post('/', [auth, admin], async (req, res) => {
   try {
-    const { name, date, time, location, capacity } = req.body;
-
-    // Get the image paths (if any)
-    const eventImage = req.files && req.files.eventImage ? `/images/${req.files.eventImage[0].filename}` : null;
-    const backgroundImage = req.files && req.files.backgroundImage ? `/images/${req.files.backgroundImage[0].filename}` : null;
-
     const event = new Event({
-      name,
-      date,
-      time,
-      location,
-      capacity,
-      availableSeats: capacity,
-      eventImage, // Store image path in DB
-      backgroundImage, // Store background image path in DB
+      name: req.body.name,
+      description: req.body.description,
+      date: req.body.date,
+      location: req.body.location,
+      capacity: req.body.capacity,
+      availableSeats: req.body.capacity,
+      eventType: req.body.eventType,
+      createdBy: req.user.userId
     });
 
     await event.save();
     res.status(201).json(event);
   } catch (err) {
-    res.status(400).json({ error: 'Error creating event', details: err });
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// RSVP for an event
+router.post('/:id/rsvp', auth, async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    if (event.availableSeats === 0) {
+      return res.status(400).json({ error: 'Event is fully booked' });
+    }
+
+    // Check if user already RSVP'd
+    if (event.registeredUsers.includes(req.user.userId)) {
+      return res.status(400).json({ error: 'Already registered for this event' });
+    }
+
+    event.registeredUsers.push(req.user.userId);
+    event.availableSeats -= 1;
+    await event.save();
+
+    // Update user's registered events
+    await User.findByIdAndUpdate(req.user.userId, {
+      $push: { registeredEvents: event._id }
+    });
+
+    res.json({ message: 'Successfully registered for event' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to register for event' });
+  }
+});
+
+// Cancel RSVP
+router.delete('/:id/rsvp', auth, async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    // Remove user from registered users
+    event.registeredUsers = event.registeredUsers.filter(
+      userId => userId.toString() !== req.user.userId
+    );
+    event.availableSeats += 1;
+    await event.save();
+
+    // Remove event from user's registered events
+    await User.findByIdAndUpdate(req.user.userId, {
+      $pull: { registeredEvents: event._id }
+    });
+
+    res.json({ message: 'Successfully cancelled registration' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to cancel registration' });
   }
 });
 
