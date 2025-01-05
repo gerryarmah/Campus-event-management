@@ -1,0 +1,23 @@
+{
+  "development": {
+    "username": "campus_event_management_bed2_user",
+    "password": "lgN9fUEEK2ET20tKMJ5XxknCkN8joIiq",
+    "database": "postgresql://campus_event_management_bed2_user:lgN9fUEEK2ET20tKMJ5XxknCkN8joIiq@dpg-ctagrha3esus739admn0-a/campus_event_management_bed2",
+    "host": "dpg-ctagrha3esus739admn0-a",
+    "dialect": "postgres"
+  },
+  "test": {
+    "username": "root",
+    "password": null,
+    "database": "database_test",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  },
+  "production": {
+    "username": "root",
+    "password": null,
+    "database": "database_production",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  }
+}
