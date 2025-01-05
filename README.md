@@ -7,8 +7,8 @@
 The **Campus Event Management System** is a web application designed to manage events on a campus. Users can register, log in, view upcoming events, and manage their event information. The system allows administrators to create and manage events, while regular users can view the list of events and register for them.
 
 ## Deployment Link
-[View the deployed application]https://campus-events-management.onrender.com
-
+Backend: https://campus-event-management-backend-re2s.onrender.com
+Frontend: https://campus-event-management-frontend.onrender.com
 ## Login Details
 If the project includes authentication, here are some test login credentials:
 
